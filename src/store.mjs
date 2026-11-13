@@ -33,3 +33,29 @@ export class ReceiptStore {
     return receipt;
   }
 }
+
+// 订单簿重建状态与接收进度的落盘存取：原子写入，读取时校验摘要。
+export class StateStore {
+  constructor(directory, name = 'book-state.json') {
+    this.directory = directory;
+    this.path = join(directory, name);
+  }
+  async load() {
+    try {
+      const record = JSON.parse(await readFile(this.path, 'utf8'));
+      if (digest(JSON.stringify(record.state)) !== record.digest) throw new Error('状态记录校验失败');
+      return record.state;
+    } catch (error) {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    }
+  }
+  async save(state) {
+    await mkdir(this.directory, { recursive: true });
+    const payload = JSON.stringify(state);
+    const record = { digest: digest(payload), savedAt: new Date().toISOString(), state };
+    const temporary = this.path + '.' + randomUUID();
+    await writeFile(temporary, JSON.stringify(record, null, 2), { flag: 'wx' });
+    await rename(temporary, this.path);
+  }
+}
